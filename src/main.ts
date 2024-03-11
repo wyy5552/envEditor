@@ -1,6 +1,6 @@
 const path = require("path");
 import { IpcMainEvent } from 'electron';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { homedir } from 'os';
 
 const rootPath = process.cwd();
@@ -18,6 +18,7 @@ function createWindow() {
   let win = new BrowserWindow({
     width: 800,
     height: 600,
+    fullscreenable: true,
     resizable: true, // 设置为 true 以允许窗口调整大小
     webPreferences: {
       nodeIntegration: true,
@@ -42,6 +43,15 @@ function createWindow() {
     } catch (err) {
       console.error(`Failed to read ${filePath}: ${err}`);
       event.reply('file-content', filePath, `Failed to read ${filePath}: ${err}`);
+    }
+  });
+  ipcMain.on('save-file-content', (event: IpcMainEvent, filePath: string, fileContent: string) => {
+    try {
+      console.log(filePath, fileContent);
+      writeFileSync(filePath, fileContent, 'utf-8');
+      event.reply('file-saved', filePath);
+    } catch (error) {
+      console.error(`Failed to save file at ${filePath}`, error);
     }
   });
 }

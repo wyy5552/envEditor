@@ -2,33 +2,132 @@
 <html>
 
 <head>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.3/codemirror.min.css">
     <style>
-        .file-container {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
+        html,
+        body {
+            height: 100%;
+            width: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
         }
 
-        .file-title {
-            margin-bottom: 10px;
+        .file-list,
+        .resizer,
+        .file-content {
+            height: 100%;
+        }
+
+        .file-list {
+            width: 25%;
+            /* Adjust this value as needed */
+        }
+
+        .resizer {
+            width: 1%;
+            /* Adjust this value as needed */
+        }
+
+        .file-content {
+            width: 74%;
+            /* Adjust this value as needed */
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+        }
+
+        .file-list {
             flex: 1;
+            overflow: auto;
+            height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+            border-right: 1px solid #555;
+            background-color: #252526;
+            color: #d4d4d4;
+        }
+
+        .file-button {
+            display: block;
+            padding: 10px;
+            border-bottom: 1px solid #555;
+            cursor: pointer;
+            color: #d4d4d4;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+
+        .file-button:hover {
+            background-color: #1e1e1e;
+        }
+
+        .resizer {
+            flex: 0 0 auto;
+            width: 10px;
+            background: #555;
+            cursor: col-resize;
+            z-index: 1;
         }
 
         .file-content {
             flex: 2;
+            height: 100vh;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            overflow: auto;
+        }
+        .CodeMirror{
+            height: 100%;
+            width: 100%;
         }
     </style>
 </head>
 
 <body>
-    <section class="section">
-        <div class="container" id="file-list"></div>
-    </section>
+    <div class="file-list" id="file-list">
+    </div>
+    <div class="resizer" id="resizer"></div>
+    <div class="file-content" id="file-content"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.3/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.63.3/mode/javascript/javascript.min.js"></script>
     <script>
-        // 
         const { ipcRenderer } = require('electron');
+        const editor = CodeMirror(document.getElementById('file-content'), {
+            lineNumbers: true,
+            mode: 'javascript',
+            theme: 'darcula'
+        });
+
+        const resizer = document.getElementById('resizer');
+        const fileList = document.getElementById('file-list');
+        let dragging = false;
+
+        resizer.addEventListener('mousedown', function (e) {
+            dragging = true;
+            document.body.style.cursor = 'col-resize';
+        });
+
+        document.addEventListener('mouseup', function (e) {
+            dragging = false;
+            document.body.style.removeProperty('cursor');
+        });
+
+        document.addEventListener('mousemove', function (e) {
+            if (dragging) {
+                const newWidth = e.clientX - fileList.getBoundingClientRect().left;
+                fileList.style.flex = `0 0 ${newWidth}px`;
+            }
+        });
+
+
 
         ipcRenderer.send('get-homedir');
 
@@ -43,27 +142,74 @@
             ];
 
             for (const filePath of files) {
-                ipcRenderer.send('get-file-content', filePath);
+                const fileButton = document.createElement('a');
+                fileButton.className = 'file-button';
+                fileButton.href = '#';
+                fileButton.textContent = filePath;
+                fileButton.dataset.filePath = filePath;
+                fileButton.onclick = (event) => {
+                    event.preventDefault();
+                    document.querySelector('.file-button.active')?.classList.remove('active');
+                    fileButton.classList.add('active');
+                    ipcRenderer.send('get-file-content', filePath);
+                    localStorage.setItem('lastSelectedFile', filePath);
+                };
+                document.getElementById('file-list').appendChild(fileButton);
+            }
+
+            const lastSelectedFile = localStorage.getItem('lastSelectedFile');
+            if (lastSelectedFile) {
+                const lastSelectedButton = document.querySelector(`.file-button[data-file-path="${lastSelectedFile}"]`);
+                if (lastSelectedButton) {
+                    lastSelectedButton.click();
+                } else {
+                    document.querySelector('.file-button').click();
+                }
+            } else {
+                document.querySelector('.file-button').click();
             }
         });
 
+        let changeHandler = null;
+        let manualChange = false;
+
         ipcRenderer.on('file-content', (event, filePath, fileContent) => {
-            const fileList = document.getElementById('file-list');
+            // If there is an existing change handler, remove it
+            if (changeHandler) {
+                editor.off('change', changeHandler);
+            }
 
-            const fileContainer = document.createElement('div');
-            fileContainer.className = 'box file-container';
+            // Set the new file content without triggering the "change" event
+            editor.setValue(fileContent);
 
-            const fileTitle = document.createElement('h2');
-            fileTitle.className = 'title is-4 file-title';
-            fileTitle.textContent = filePath;
+            // Define the change handler
+            changeHandler = () => {
+                manualChange = true;
+            };
 
-            const fileContentArea = document.createElement('textarea');
-            fileContentArea.className = 'textarea file-content';
-            fileContentArea.textContent = fileContent;
+            // Add the change handler back after a delay
+            setTimeout(() => {
+                editor.on('change', changeHandler);
+            }, 0);
+        });
 
-            fileContainer.appendChild(fileTitle);
-            fileContainer.appendChild(fileContentArea);
-            fileList.appendChild(fileContainer);
+        ipcRenderer.on('file-saved', (event, filePath) => {
+            alert('File saved successfully.');
+            ipcRenderer.send('get-file-content', filePath);
+        });
+
+        window.addEventListener('keydown', (event) => {
+            if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+                event.preventDefault();
+                if (manualChange) {
+                    if (confirm('是否要替换当前系统文件?')) {
+                        const activeFile = document.querySelector('.file-button.active').dataset.filePath;
+                        ipcRenderer.send('save-file-content', activeFile, editor.getValue());
+                        console.log('save-file-content', activeFile, editor.getValue());
+                    }
+                    manualChange = false;
+                }
+            }
         });
     </script>
 </body>
