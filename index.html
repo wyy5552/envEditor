@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.3/css/bulma.min.css">
+    <style>
+        .file-container {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .file-title {
+            margin-bottom: 10px;
+            flex: 1;
+        }
+
+        .file-content {
+            flex: 2;
+        }
+    </style>
+</head>
+
+<body>
+    <section class="section">
+        <div class="container" id="file-list"></div>
+    </section>
+
+    <script>
+        // 
+        const { ipcRenderer } = require('electron');
+
+        ipcRenderer.send('get-homedir');
+
+        ipcRenderer.on('homedir', (event, homeDirectory) => {
+            const files = [
+                '/etc/profile',
+                '/etc/paths',
+                `${homeDirectory}/.bash_profile`,
+                `${homeDirectory}/.bash_login`,
+                `${homeDirectory}/.profile`,
+                `${homeDirectory}/.bashrc`
+            ];
+
+            for (const filePath of files) {
+                ipcRenderer.send('get-file-content', filePath);
+            }
+        });
+
+        ipcRenderer.on('file-content', (event, filePath, fileContent) => {
+            const fileList = document.getElementById('file-list');
+
+            const fileContainer = document.createElement('div');
+            fileContainer.className = 'box file-container';
+
+            const fileTitle = document.createElement('h2');
+            fileTitle.className = 'title is-4 file-title';
+            fileTitle.textContent = filePath;
+
+            const fileContentArea = document.createElement('textarea');
+            fileContentArea.className = 'textarea file-content';
+            fileContentArea.textContent = fileContent;
+
+            fileContainer.appendChild(fileTitle);
+            fileContainer.appendChild(fileContentArea);
+            fileList.appendChild(fileContainer);
+        });
+    </script>
+</body>
+
+</html>
